@@ -5,13 +5,13 @@ common:
     About:
         one: '关于我'
         other: '关于我'
-    archives:
+    archive:
         one: '归档'
         other: '归档'
-    categories:
+    category:
         one: '分类'
         other: '分类'
-    tags:
+    tag:
         one: '标签'
         other: '标签'
     post:
