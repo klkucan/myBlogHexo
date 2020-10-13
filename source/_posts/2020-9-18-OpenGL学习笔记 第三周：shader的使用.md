@@ -356,5 +356,128 @@ GLuint CreateProgram(GLuint vsShader, GLuint fsShader)
 
 ![image](https://note.youdao.com/yws/res/32762/C4DC95E76DC24F1A8B576CB98EB113B7)
 
+#### 2020.10.13补充
 
+- 今天在看unityshader的时候突然理解了之前的一个疑问，就是下面这个结构体中的关键字`POSITION NORMAL TANGENT TEXCOORD0`的数据是怎么来的。虽然知道a2v是application传递给vertex shader的，但是今天在回头看，其实就是unity默认做了position等attribute的location获取，以及调用渲染时从vbo中指定GPU如何获取数据。
 
+```
+	struct a2v {
+		float4 vertex : POSITION;
+		float3 normal : NORMAL;
+		float4 tangent : TANGENT;
+		float4 texcoord : TEXCOORD0;
+	};
+```
+
+- 下面的代码代码是最终的shader::bind，补充了纹理单元的部分。
+
+```cpp
+void Shader::Bind(float* M, float* V, float* P)
+{
+	// 设置shader中的矩阵变量
+	glUseProgram(mProgram);
+
+	// 插槽位置，几个矩阵（单插槽可以多矩阵），CPU传到GPU时是否需要转置，矩阵地址(从定义看是第一个数据的位置)
+	glUniformMatrix4fv(mModelMatrixLocation, 1, GL_FALSE, M);
+	glUniformMatrix4fv(mViewMatrixLocation, 1, GL_FALSE, V);
+	glUniformMatrix4fv(mProjectionMatrixLocation, 1, GL_FALSE, P);
+
+	int index = 0;
+	for (auto iter = mUniformTextures.begin(); iter != mUniformTextures.end(); ++iter)
+	{
+		// 激活 texture unit
+		glActiveTexture(GL_TEXTURE0 + index);
+		// 将纹理绑定到unit
+		glBindTexture(GL_TEXTURE_2D, iter->second->mTexture);
+		// 将插槽与纹理单元绑定
+		// 这里就比较灵活了，可以自由的组合插槽与纹理。之前的做法是插槽绑定当前的纹理。
+		glUniform1i(iter->second->mLocation, index++);
+
+		/*
+			注意：不论使用几张纹理，都是在使用纹理单元。下面代码隐藏的细节是，0号纹理单元默认就是
+			激活状态，因此glBindTexture将纹理绑定到0号纹理单元，然后glUniform1i使用的是0号。
+			但是在多纹理下，就必须指定使用哪个纹理单元了。
+
+			glBindTexture(GL_TEXTURE_2D, iter->second->mTexture);
+			glUniform1i(iter->second->mLocation,0);
+		*/
+	}
+
+	// 给vector4参数赋值
+	for (auto iter = mUniformVec4s.begin(); iter != mUniformVec4s.end(); ++iter)
+	{
+		glUniform4fv(iter->second->mLocation, 1, iter->second->v);
+	}
+
+	// attribute插槽中某一个位置生效
+	glEnableVertexAttribArray(mPositionLocation);
+
+	// glVertexAttribPointer的作用是告诉GPU如何读取VBO的数据
+	// 参数：GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer
+	// 插槽位置 ， 插槽中数据有几个分量（现在的位置是4个，xyzw），分量类型，
+	// 是否归一化（传入的如果不是float会变成float，e.g. 255,255,255,255→ 1.0,1.0,1.0,1.0)
+	// 紧挨着的两个点起始地址相距多远，这个位置信息从vbo的什么地址开始取值（从0号位置开始取值）
+	glVertexAttribPointer(mPositionLocation, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
+
+	// 给color变量赋值
+	glEnableVertexAttribArray(mColorLocation);
+	glVertexAttribPointer(mColorLocation, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(sizeof(float) * 4));
+
+	// 给texcoord赋值
+	glEnableVertexAttribArray(mTexcoordLocation);
+	glVertexAttribPointer(mTexcoordLocation, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(sizeof(float) * 8));
+
+	// 给normal赋值
+	glEnableVertexAttribArray(mNormalLocation);
+	glVertexAttribPointer(mNormalLocation, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(sizeof(float) * 12));
+}
+
+void Shader::SetTexture(const char * name, const char * imagePath)
+{
+	auto iter = mUniformTextures.find(name);
+	if (iter == mUniformTextures.end())
+	{
+		GLuint location = glGetUniformLocation(mProgram, name);
+
+		if (location != -1) {
+			UniformTexture *t = new UniformTexture();
+			t->mLocation = location;
+			t->mTexture = CreateTexture2DFromBMP(imagePath);
+			mUniformTextures.insert(std::pair<std::string, UniformTexture*>(name, t));
+		}
+	}
+	else
+	{
+		glDeleteTextures(1, &iter->second->mTexture);
+		iter->second->mTexture = CreateTexture2DFromBMP(imagePath);
+	}
+
+}
+
+void Shader::SetVec4(const char* name, float x, float y, float z, float w)
+{
+	auto iter = mUniformVec4s.find(name);
+	if (iter == mUniformVec4s.end())
+	{
+		UniformVector4f* v = new UniformVector4f();
+		GLuint location = glGetUniformLocation(mProgram, name);
+		if (location != -1)
+		{
+			v->mLocation = location;
+			v->v[0] = x;
+			v->v[1] = y;
+			v->v[2] = z;
+			v->v[3] = w;
+
+			mUniformVec4s.insert(std::pair<std::string, UniformVector4f*>(name, v));
+		}
+	}
+	else
+	{
+		iter->second->v[0] = x;
+		iter->second->v[1] = y;
+		iter->second->v[2] = z;
+		iter->second->v[3] = w;
+	}
+}
+```
