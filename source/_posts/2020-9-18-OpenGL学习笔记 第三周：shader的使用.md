@@ -3,6 +3,8 @@ layout: post
 title:  "OpenGL学习笔记 第三周：shader的使用"
 date:   2020-9-14 20:56:00 +0800
 header-img: "img/home-bg-o.jpg"
+categories: 
+	- 游戏开发
 tags:
     - OpenGL
 ---

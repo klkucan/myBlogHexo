@@ -3,6 +3,8 @@ layout: post
 title:  "OpenGL学习笔记 第一周：环境构建、OpenGL基础"
 date:   2020-9-6 20:48:00 +0800
 header-img: "img/home-bg-o.jpg"
+categories: 
+	- 游戏开发
 tags:
     - OpenGL
 ---
